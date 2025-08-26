@@ -57,7 +57,7 @@ with open(output_model_path, "r", encoding="utf-8") as f:
 # Pergunta se quer criar grupo
 create_group = input("Deseja criar um novo queryGroup? (s/N): ").strip().lower()
 if create_group not in ("s", "n"):
-    create_group = "N"
+    create_group = "n"
 new_group_block = ""
 if create_group == "s":
     group_name = input("Informe o nome do grupo: ").strip()
@@ -102,37 +102,26 @@ for ref in input_tables:
     if match:
         name = match.group(1)
         if name in output_table_names:
-            # Renomeia referência
-            if ref.startswith("ref table '"):
-                renamed_input_tables.append(f"ref table '{name} (1)'")
-            else:
-                renamed_input_tables.append(f"ref table {name} (1)")
+            renamed_input_tables.append(f"ref table '{name} (1)'")
         else:
             renamed_input_tables.append(ref)
     else:
         renamed_input_tables.append(ref)
 all_tables = output_tables + renamed_input_tables
 
-# Parágrafos explicativos
-before_tables = "\n\n"
-after_tables = "\n\n"
+# Adiciona os parágrafos e as referências
+ref_culture_info = get_ref_culture_info(output_content)
 
 # Remove todas as linhas ref table e ref cultureInfo do output
 output_content = re.sub(r'(ref table .+\n)+', '', output_content)
 output_content = re.sub(r'(ref cultureInfo .+)$', '', output_content, flags=re.MULTILINE)
 
-# Junta as tabelas do output e input, mantendo a ordem
-all_tables = output_tables + input_tables
-
-# Adiciona os parágrafos e as referências
-ref_culture_info = get_ref_culture_info(output_content)
-
 # Adiciona os parágrafos e as referências
 output_content = (
     output_content.rstrip() +
-    before_tables +
+    "\n\n" +
     '\n'.join(all_tables) +
-    after_tables +
+    "\n\n" +
     (ref_culture_info if ref_culture_info else '') +
     '\n'
 )
@@ -163,9 +152,6 @@ if input_level != output_level:
 print("✅ Database verificada com sucesso!")
 
 print("Criando expressões...")
-
-if not input_semantic_dirs or not output_semantic_dirs:
-    raise FileNotFoundError("Não foi encontrada uma pasta terminando com '.SemanticModel' em input_BI ou output_BI.")
 
 input_path = os.path.join(input_semantic_dirs[0], "definition", "expressions.tmdl")
 output_path = os.path.join(output_semantic_dirs[0], "definition", "expressions.tmdl")
@@ -200,7 +186,7 @@ if not goto_relations:
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(merged_content)
 
-    print("✅ Expressões criadas com sucesso!")
+print("✅ Expressões criadas com sucesso!")
 
 print("Criando relações... ")
 
@@ -290,11 +276,8 @@ for input_file in os.listdir(input_tables_path):
             content = rename_table_in_tmdl(content, table_name, table_name)
         with open(output_file_path, "w", encoding="utf-8") as f:
             f.write(content)
-
-# Adiciona 'queryGroup: group_name' entre mode e source nas tabelas do output que vieram do input
-if create_group == "s":
-    for input_file in os.listdir(input_tables_path):
-        output_file_path = os.path.join(output_tables_path, input_file)
+    # Adiciona 'queryGroup: group_name' entre mode e source nas tabelas do output que vieram do input
+    if create_group == "s":
         if os.path.isfile(output_file_path):
             with open(output_file_path, "r", encoding="utf-8") as f:
                 table_content = f.read()
