@@ -3,6 +3,7 @@ import stat
 import shutil
 from pathlib import Path
 
+print("Iniciando restauração do backup...")
 # Remove restrições de escrita (somente leitura) de arquivos e pastas
 def _make_writable(path: Path):
     try:
@@ -41,3 +42,4 @@ path_backup = Path(os.getcwd()) / 'backup'
 
 # Substitui o conteúdo da pasta output pelo da pasta backup
 replace_dir_contents(path_backup, path_output)
+print("✅ Backup restaurado com sucesso!")
