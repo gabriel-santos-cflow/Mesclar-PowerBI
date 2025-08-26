@@ -39,3 +39,5 @@ No Power BI, clique no aviso de atualização no canto superior para atualizar o
 Em seguida, salve o arquivo como .pbix para que ele funcione de forma independente (o .pbip só funciona dentro da pasta, pois depende dos arquivos TMDL).
 
 Caso seja necessário restaurar o estado original, utilize o script restore-backup.py, que substitui todo o conteúdo da pasta output_BI pelo conteúdo da pasta backup.
+
+Em casos de tabelas com mesmo nome, aquela de origem do input, será renomeada com adição de ' (1)' (Ex.: 'Calendário' -> 'Calendário (1)')
