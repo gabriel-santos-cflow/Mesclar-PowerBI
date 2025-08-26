@@ -65,15 +65,20 @@ if create_group == "s":
     N = len(existing_groups)
     new_group_block = f"\nqueryGroup '{group_name}'\n\n\tannotation PBI_QueryGroupOrder = {N}\n"
 
-# Adiciona novo grupo após último queryGroup ou após 'model Model'
-querygroup_matches = list(re.finditer(r"(queryGroup\s+'.*?'\n\n\tannotation PBI_QueryGroupOrder = \d+\n)", output_content, re.DOTALL))
-if querygroup_matches:
-    last_querygroup = querygroup_matches[-1]
-    insert_pos = last_querygroup.end()
-else:
-    model_match = re.search(r"(model Model[^\n]*\n)", output_content)
-    insert_pos = model_match.end() if model_match else 0
-output_content = output_content[:insert_pos] + new_group_block + output_content[insert_pos:]
+    # Encontra o final do bloco model Model
+    model_block_match = re.search(
+        r"(model Model[\s\S]*?returnErrorValuesAsNull\s*\n)", output_content
+    )
+    if model_block_match:
+        insert_pos = model_block_match.end()
+        output_content = (
+            output_content[:insert_pos] +
+            new_group_block +
+            output_content[insert_pos:]
+        )
+    else:
+        # Se não encontrar, insere no início
+        output_content = new_group_block + output_content
 
 # Atualiza annotation PBI_QueryOrder
 input_query_order = get_query_order(input_content)
@@ -89,8 +94,24 @@ output_content = re.sub(
 
 # Anexa todas as linhas 'ref table' do input ao output (antes do ref cultureInfo)
 output_tables = get_ref_tables(output_content)
+output_table_names = set(re.findall(r"ref table '?([^\n']+)'?", "\n".join(output_tables)))
 input_tables = get_ref_tables(input_content)
-ref_culture_info = get_ref_culture_info(output_content)
+renamed_input_tables = []
+for ref in input_tables:
+    match = re.match(r"ref table '?([^\n']+)'?", ref)
+    if match:
+        name = match.group(1)
+        if name in output_table_names:
+            # Renomeia referência
+            if ref.startswith("ref table '"):
+                renamed_input_tables.append(f"ref table '{name} (1)'")
+            else:
+                renamed_input_tables.append(f"ref table {name} (1)")
+        else:
+            renamed_input_tables.append(ref)
+    else:
+        renamed_input_tables.append(ref)
+all_tables = output_tables + renamed_input_tables
 
 # Parágrafos explicativos
 before_tables = "\n\n"
@@ -102,6 +123,9 @@ output_content = re.sub(r'(ref cultureInfo .+)$', '', output_content, flags=re.M
 
 # Junta as tabelas do output e input, mantendo a ordem
 all_tables = output_tables + input_tables
+
+# Adiciona os parágrafos e as referências
+ref_culture_info = get_ref_culture_info(output_content)
 
 # Adiciona os parágrafos e as referências
 output_content = (
@@ -146,29 +170,37 @@ if not input_semantic_dirs or not output_semantic_dirs:
 input_path = os.path.join(input_semantic_dirs[0], "definition", "expressions.tmdl")
 output_path = os.path.join(output_semantic_dirs[0], "definition", "expressions.tmdl")
 
-# Lê os arquivos
-with open(input_path, "r", encoding="utf-8") as f:
-    input_content = f.read()
-    # Adiciona a linha após cada lineageTag
-if create_group == "s":
-    def insert_querygroup_expr(match):
-        return f"{match.group(0)}\n\tqueryGroup: {group_name}"
-    input_content = re.sub(
-        r"(lineageTag:[^\n]*)",
-        insert_querygroup_expr,
-        input_content
-    )
-with open(output_path, "r", encoding="utf-8") as f:
-    output_content = f.read()
+if not (os.path.exists(input_path) and os.path.exists(output_path)):
+    print("Arquivo expressions.tmdl não encontrado. Pulando para relações...")
+    # Pula para a criação das relações
+    goto_relations = True
+else:
+    goto_relations = False
 
-# Une os conteúdos
-merged_content = input_content + "\n" + output_content
+if not goto_relations:
+    # Lê os arquivos
+    with open(input_path, "r", encoding="utf-8") as f:
+        input_content = f.read()
+        # Adiciona a linha após cada lineageTag
+    if create_group == "s":
+        def insert_querygroup_expr(match):
+            return f"{match.group(0)}\n\tqueryGroup: {group_name}"
+        input_content = re.sub(
+            r"(lineageTag:[^\n]*)",
+            insert_querygroup_expr,
+            input_content
+        )
+    with open(output_path, "r", encoding="utf-8") as f:
+        output_content = f.read()
 
-# Substitui o arquivo da pasta output
-with open(output_path, "w", encoding="utf-8") as f:
-    f.write(merged_content)
+    # Une os conteúdos
+    merged_content = input_content + "\n" + output_content
 
-print("✅ Expressões criadas com sucesso!")
+    # Substitui o arquivo da pasta output
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(merged_content)
+
+    print("✅ Expressões criadas com sucesso!")
 
 print("Criando relações... ")
 
@@ -184,7 +216,28 @@ with open(input_rel_path, "r", encoding="utf-8") as f:
 with open(output_rel_path, "r", encoding="utf-8") as f:
     output_rel_content = f.read()
 
-# Adiciona o conteúdo do input ao output
+def rename_table_in_relations(rel_content, duplicated_names):
+    def replacer(match):
+        table = match.group(1).strip("' ").strip()  # Remove aspas e espaços extras
+        column = match.group(2).strip("' ").strip()
+        # Renomeia se for duplicada
+        if table in duplicated_names:
+            new_table = f"{table} (1)"
+        else:
+            new_table = table
+        # Aspas se houver espaço ou se já tinha aspas
+        if " " in new_table or match.group(1).startswith("'"):
+            new_table = f"'{new_table}'"
+        return f"{new_table}.{column}"
+    # Substitui todas as ocorrências
+    return re.sub(r"([']?[A-Za-z0-9 _]+[']?)\.([A-Za-z0-9 _']+)", replacer, rel_content)
+
+# Antes de combinar, renomeie as relações do input
+duplicated_names = output_table_names.intersection(
+    set(re.findall(r"ref table '?([^\n']+)'?", "\n".join(input_tables)))
+)
+input_rel_content = rename_table_in_relations(input_rel_content, duplicated_names)
+
 combined_rel_content = output_rel_content.strip() + "\n\n" + input_rel_content.strip() + "\n"
 
 # Salva o conteúdo combinado de volta no arquivo de output
@@ -193,22 +246,51 @@ with open(output_rel_path, "w", encoding="utf-8") as f:
 
 print("✅ Relações criadas com sucesso!")
 
-print("Criando tabelas...")
+print("Copiando tabelas...")
 
 # Obtém caminhos dos arquivos de tabelas
 input_tables_path = os.path.join(input_semantic_dirs[0], "definition", "tables")
 output_tables_path = os.path.join(output_semantic_dirs[0], "definition", "tables")
 
+def rename_table_in_tmdl(content, old_name, new_name):
+    # Renomeia no bloco table
+    content = re.sub(
+        rf"(table\s+)('{re.escape(old_name)}'|{re.escape(old_name)})",
+        lambda m: f"{m.group(1)}'{new_name}'" if (" " in new_name or m.group(2).startswith("'")) else f"{m.group(1)}{new_name}",
+        content
+    )
+    # Renomeia no bloco partition (com espaços/tabs antes e depois)
+    content = re.sub(
+        rf"(^[ \t]*partition[ \t]+)('{re.escape(old_name)}'|{re.escape(old_name)})",
+        lambda m: f"{m.group(1)}'{new_name}'" if (" " in new_name or m.group(2).startswith("'")) else f"{m.group(1)}{new_name}",
+        content,
+        flags=re.MULTILINE
+    )
+    return content
+
 # Copia todas as tabelas do input para o output
+output_table_files = set(os.listdir(output_tables_path))
 for input_file in os.listdir(input_tables_path):
+    table_name = input_file.replace(".tmdl", "")
+    new_table_name = table_name
+    if input_file in output_table_files:
+        new_table_name = f"{table_name} (1)"
+        new_input_file = f"{new_table_name}.tmdl"
+    else:
+        new_input_file = input_file
     input_file_path = os.path.join(input_tables_path, input_file)
-    output_file_path = os.path.join(output_tables_path, input_file)
+    output_file_path = os.path.join(output_tables_path, new_input_file)
     if os.path.isfile(input_file_path):
         with open(input_file_path, "r", encoding="utf-8") as f:
             content = f.read()
+        # Renomeia o nome da tabela dentro do arquivo (table e partition)
+        if new_table_name != table_name:
+            content = rename_table_in_tmdl(content, table_name, new_table_name)
+        else:
+            content = rename_table_in_tmdl(content, table_name, table_name)
         with open(output_file_path, "w", encoding="utf-8") as f:
             f.write(content)
-            
+
 # Adiciona 'queryGroup: group_name' entre mode e source nas tabelas do output que vieram do input
 if create_group == "s":
     for input_file in os.listdir(input_tables_path):
