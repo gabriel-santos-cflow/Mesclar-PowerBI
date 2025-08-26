@@ -10,7 +10,7 @@ annotation __PBI_TimeIntelligenceEnabled = 1
 
 annotation PBIDesktopVersion = 2.146.1026.0 (25.08)+fb98ab832373de81dccd5c01cd96306a48477556
 
-annotation PBI_QueryOrder = ['Business Area', 'Cost Element', 'Country Region', 'Date', 'Department', 'Fact', 'IT Area', 'Scenario', 'Range', 'Product', 'SalesFact', 'Geo', 'Sentiment', 'Manufacturer', 'Indicators', 'KPI', 'Category']
+annotation PBI_QueryOrder = ["Business Area","Cost Element","Country Region","Date","Department","Fact","IT Area","Scenario","Range"]
 
 annotation PBI_ProTooling = ["DevMode"]
 
@@ -25,16 +25,6 @@ ref table Scenario
 ref table Range
 ref table DateTableTemplate_5db4a9d0-37ae-4eb8-b985-081b6a9bccc6
 ref table LocalDateTable_c659a3fc-ad91-4f80-b458-6b22a6d14a66
-ref table Product
-ref table SalesFact
-ref table Date
-ref table Geo
-ref table Sentiment
-ref table Manufacturer
-ref table DateTableTemplate_65abda87-791b-47b1-be17-c5cc39d52815
-ref table LocalDateTable_a1cd3d03-2df1-466a-bea5-79b9463a9397
-ref table Indicators
-ref table KPI
-ref table Category
 
+ref cultureInfo en-US
 
